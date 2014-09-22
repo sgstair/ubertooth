@@ -78,6 +78,150 @@ static TFnHandleRequest	*pfnHandleCustomReq = NULL;
 static const U8			*pabDescrip = NULL;
 
 
+
+
+
+
+// OS String descriptor code block; consider moving this to another file.
+
+/** Vendor request index for Microsoft descriptors. 0 is disabled. */
+static U8				bMsVendorIndex = 0;
+/** Device interface GUID to provide to the OS  */
+static char				*pcDeviceInterfaceGuid = 0;
+
+/** OS String descriptor, identifies the vendor request to use for Microsoft Descriptor requests. */
+static U8				abOsStringDescriptor[] = 
+{
+	0x12,
+	DESC_STRING,
+	'M', 0, 'S', 0, 'F', 0, 'T', 0, '1', 0, '0', 0, '0', 0, 'A', 0
+};
+/** Extended OS Feature descriptor - Configured to identify device as a WINUSB Class device.  */
+static const U8			abExtendedOsFeatureDescriptor[] = {
+	0x28, 0x00, 0x00, 0x00, // 0x28 bytes
+	0x00, 0x01, // BCD Version ( 0x0100 )
+	0x04, 0x00, // wIndex (Extended compat ID)
+	0x01,		// count
+	0,0,0,0,0,0,0, // 7x reserved
+	// Function section
+	
+	0x00,		// Interface number
+	0x01,		// Reserved, must be 1
+	'W', 'I', 'N', 'U', 'S', 'B', 0, 0, // Compatible ID
+	0,0,0,0,0,0,0,0, // Secondary ID
+	0,0,0,0,0,0 // 6x Reserved
+};
+
+
+/**
+	Check if the Vendor request is the index we should filter, and respond to it if so.
+	This is a basic implementation of OS Descriptors which only associates a WINUSB descriptor 
+	with the first interface on the USB device.
+		
+	@param [in]		*pSetup		Setup packet containing the Vendor request.
+	@param [out]	*pfSuccess	Status of this filter, FALSE if should stall.
+	@param [out]	*piLen		Descriptor length
+	@param [out]	*ppbData	Descriptor data
+	
+	@return TRUE if the request was handled by this filter, FALSE otherwise
+ */
+BOOL USBFilterOsVendorMessage(TSetupPacket *pSetup, BOOL *pfSuccess, int *piLen, U8 **ppbData)
+{
+	if(bMsVendorIndex == 0)	{
+		// Feature is disabled.
+		return FALSE;
+	}
+	
+	if(pSetup->bRequest == bMsVendorIndex) {
+		// Fail unless we make it to the end.
+		*pfSuccess = FALSE;
+	
+		int iRequestLength = pSetup->wLength;
+		U8 bInterfaceNumber = GET_OS_DESC_INTERFACE(pSetup->wValue);
+		U8 bPageNumber = GET_OS_DESC_PAGE(pSetup->wValue);
+	
+		switch (pSetup->wIndex) {
+		case DESC_EXT_OS_FEATURES:
+			*ppbData = abExtendedOsFeatureDescriptor;
+			*piLen = sizeof(abExtendedOsFeatureDescriptor);
+			break;
+			
+		case DESC_EXT_OS_PROPERTIES:
+			// Todo... Generate or include structure for this.
+			break;
+
+		default:
+			return TRUE;
+		}
+		
+		// Decide what portion of the descriptor to return.
+		int iPageOffset = bPageNumber*0x10000; // This will probably always be zero...
+		if (*piLen < iPageOffset) {
+			// Not enough data for the requested offset.
+			return TRUE;
+		}
+		*ppbData += iPageOffset;
+		*piLen -= iPageOffset;
+		
+		if (*piLen > iRequestLength) {
+			// Clip data longer than the requested length
+			*piLen = iRequestLength
+		}
+	
+		*pfSuccess = TRUE;
+		return TRUE;
+	}
+	
+	// These are not the requests you are looking for
+	return FALSE;
+}
+
+
+/**
+	Enable the handling of OS Descriptor requests, to automatically load Winusb
+	on this device in a Windows operating system.
+		
+	@param [in]		bVendorRequestIndex		Vendor request index to claim
+												for OS Descriptor interface
+												Zero to disable.
+												
+	@param [in]		pcInterfaceGuid			String GUID in curly braces
+												Windows will use this as a 
+												Device Interface GUID
+ */
+void USBRegisterWinusbInterface(u8 bVendorRequestIndex, const char* pcInterfaceGuid)
+{
+	bMsVendorIndex = bVendorRequestIndex;
+	pcDeviceInterfaceGuid  = pcInterfaceGuid;
+}
+
+
+
+
+/**
+	Generate the requested OS String descriptor and return it if enabled.
+		
+	@param [out]	*piLen		Descriptor length
+	@param [out]	*ppbData	Descriptor data
+	
+	@return TRUE if the descriptor was found, FALSE otherwise
+ */
+BOOL USBGetOsStringDescriptor(int *piLen, U8 **ppbData)
+{
+	// The last character in the OS String descriptor specifies the vendor request index to use.
+	abOsStringDescriptor[sizeof(abOsStringDescriptor)-2] = bMsVendorIndex;
+	
+	*ppbData = abOsStringDescriptor;
+	*piLen = sizeof(abOsStringDescriptor);
+	return TRUE;
+}
+
+
+
+
+
+
+
 /**
 	Registers a pointer to a descriptor block containing all descriptors
 	for the device.
@@ -111,6 +255,16 @@ BOOL USBGetDescriptor(U16 wTypeIndex, U16 wLangID, int *piLen, U8 **ppbData)
 
 	bType = GET_DESC_TYPE(wTypeIndex);
 	bIndex = GET_DESC_INDEX(wTypeIndex);
+	
+    if (bType == DESC_STRING &&
+        bIndex == DESC_STRING_OS) {
+        
+        if (USBGetOsStringDescriptor(piLen, ppbData)) {
+            
+            return TRUE;
+        }
+    }
+    	
 	
 	pab = (U8 *)pabDescrip;
 	iCurIndex = 0;

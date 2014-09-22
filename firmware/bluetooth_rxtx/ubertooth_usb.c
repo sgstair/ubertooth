@@ -207,6 +207,9 @@ int ubertooth_usb_init(VendorRequestHandler *vendor_req_handler)
 	// enable USB interrupts
 	//ISER0 = ISER0_ISE_USB;
 
+	// Enable driverless setup on Windows
+	USBRegisterWinusbInterface(0xFF, "{8ac47a88-cc26-4aa9-887b-42ca8cf07a63}");
+
 	// connect to bus
 	USBHwConnect(TRUE);
 
