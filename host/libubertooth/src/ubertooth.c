@@ -29,6 +29,14 @@
 
 #include "ubertooth.h"
 #include "ubertooth_control.h"
+#include "version.h"
+
+#ifndef RELEASE
+#define RELEASE "unknown"
+#endif
+#ifndef VERSION
+#define VERSION "unknown"
+#endif
 
 /* this stuff should probably be in a struct managed by the calling program */
 static usb_pkt_rx usb_packets[NUM_BANKS];
@@ -57,6 +65,10 @@ lell_pcap_handle * h_pcap_le = NULL;
 btbb_pcapng_handle * h_pcapng_bredr = NULL;
 lell_pcapng_handle * h_pcapng_le = NULL;
 
+void print_version() {
+	printf("libubertooth %s (%s), libbtbb %s (%s)\n", VERSION, RELEASE,
+		   btbb_get_version(), btbb_get_release());
+}
 void stop_transfers(int sig) {
 	sig = sig; // Unused parameter
 	stop_ubertooth = 1;
@@ -473,6 +485,9 @@ static void cb_br_rx(void* args, usb_pkt_rx *rx, int bank)
 	if (offset < 0)
 		goto out;
 
+	btbb_packet_set_modulation(pkt, BTBB_MOD_GFSK);
+	btbb_packet_set_transport(pkt, BTBB_TRANSPORT_ANY);
+
 	/* Copy out remaining banks of symbols for full analysis. */
 	for (i = 1; i < NUM_BANKS; i++)
 		memcpy(syms + i * BANK_LEN,
@@ -485,20 +500,6 @@ static void cb_br_rx(void* args, usb_pkt_rx *rx, int bank)
 	clkn = (rx->clkn_high << 20) + (le32toh(rx->clk100ns) + offset + 1562) / 3125;
 	btbb_packet_set_data(pkt, syms + offset, NUM_BANKS * BANK_LEN - offset,
 			   rx->channel, clkn);
-
-	/* Dump to PCAP/PCAPNG if specified */
-#if defined(USE_PCAP)
-        if (h_pcap_bredr) {
-		btbb_pcap_append_packet(h_pcap_bredr, nowns,
-					signal_level, noise_level,
-					lap, uap, pkt);
-        }
-#endif
-	if (h_pcapng_bredr) {
-		btbb_pcapng_append_packet(h_pcapng_bredr, nowns, 
-					  signal_level, noise_level,
-					  lap, uap, pkt);
-	}
 
 	/* When reading from file, caller will read
 	 * systime before calling this routine, so do
@@ -520,6 +521,7 @@ static void cb_br_rx(void* args, usb_pkt_rx *rx, int bank)
 				   sizeof(usb_pkt_rx), 1, dumpfile)
 			    != 1) {;}
 		}
+		fflush(dumpfile);
 	}
 
 	printf("systime=%u ch=%2d LAP=%06x err=%u clk100ns=%u clk1=%u s=%d n=%d snr=%d\n",
@@ -534,6 +536,21 @@ static void cb_br_rx(void* args, usb_pkt_rx *rx, int bank)
 	       snr);
 
 	i = btbb_process_packet(pkt, pn);
+
+	/* Dump to PCAP/PCAPNG if specified */
+#if defined(USE_PCAP)
+	if (h_pcap_bredr) {
+		btbb_pcap_append_packet(h_pcap_bredr, nowns,
+					signal_level, noise_level,
+					lap, uap, pkt);
+	}
+#endif
+	if (h_pcapng_bredr) {
+		btbb_pcapng_append_packet(h_pcapng_bredr, nowns, 
+					signal_level, noise_level,
+					lap, uap, pkt);
+	}
+	
 	if(i < 0) {
 		follow_pn = pn;
 		stop_ubertooth = 1;
@@ -600,6 +617,35 @@ void cb_btle(void* args, usb_pkt_rx *rx, int bank)
 
 	UNUSED(bank);
 
+	// display LE promiscuous mode state changes
+	if (rx->pkt_type == LE_PROMISC) {
+		u8 state = rx->data[0];
+		void *val = &rx->data[1];
+
+		printf("--------------------\n");
+		printf("LE Promisc - ");
+		switch (state) {
+			case 0:
+				printf("Access Address: %08x\n", *(uint32_t *)val);
+				break;
+			case 1:
+				printf("CRC Init: %06x\n", *(uint32_t *)val);
+				break;
+			case 2:
+				printf("Hop interval: %g ms\n", *(uint16_t *)val * 1.25);
+				break;
+			case 3:
+				printf("Hop increment: %u\n", *(uint8_t *)val);
+				break;
+			default:
+				printf("Unknown %u\n", state);
+				break;
+		};
+		printf("\n");
+
+		return;
+	}
+
 	uint64_t nowns = now_ns_from_clk100ns( rx );
 
 	/* Sanity check */
@@ -614,6 +660,7 @@ void cb_btle(void* args, usb_pkt_rx *rx, int bank)
 		uint32_t systime_be = htobe32(systime);
 		if (fwrite(&systime_be, sizeof(systime_be), 1, dumpfile) != 1) {;}
 		if (fwrite(rx, sizeof(usb_pkt_rx), 1, dumpfile) != 1) {;}
+		fflush(dumpfile);
 	}
 
 	lell_allocate_and_decode(rx->data, rx->channel + 2402, rx->clk100ns, &pkt);
@@ -713,6 +760,7 @@ static void cb_dump_full(void* args, usb_pkt_rx *rx, int bank)
 	} else {
 		if (fwrite(&time_be, 1, sizeof(time_be), dumpfile) != 1) {;}
 		if (fwrite(buf, sizeof(u8), PKT_LEN, dumpfile) != 1) {;}
+		fflush(dumpfile);
 	}
 }
 
