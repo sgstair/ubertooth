@@ -101,7 +101,7 @@ void USBRegisterCustomReqHandler(TFnHandleRequest *pfnHandler);
 
 /** Enable generation of OS Descriptors to allow for driverless WinUSB device install on Windows 
 	Guid string format: "{00000000-0000-0000-0000-000000000000}" (Generate a new GUID) */
-void USBRegisterWinusbInterface(u8 bVendorRequestIndex, const char* pcInterfaceGuid);
+void USBRegisterWinusbInterface(U8 bVendorRequestIndex, const char* pcInterfaceGuid);
 
 /** Descriptor handler callback */
 typedef BOOL (TFnGetDescriptor)(U16 wTypeIndex, U16 wLangID, int *piLen, U8 **ppbData);
