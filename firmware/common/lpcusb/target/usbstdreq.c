@@ -121,7 +121,7 @@ static U8				abExtendedPropertiesFeatureDescriptor[] = {
 	0x01, 0x00, 				// Number of sections
 	0x88, 0x00, 0x00, 0x00, 	// Length of property #0
 	0x07, 0x00, 0x00, 0x00, 	// Data type 7 (REG_MULTI_SZ)
-	0x28, 0x00, 				// Property name length
+	0x2a, 0x00, 				// Property name length
 	'D', 0, 'e', 0, 'v', 0, 'i', 0, 'c', 0, 'e', 0, 'I', 0, 'n', 0, 't', 0, 'e', 0, 'r', 0, 'f', 0, 'a', 0, 'c', 0, 'e', 0, 
 	'G', 0, 'U', 0, 'I', 0, 'D', 0, 's', 0, 0, 0, // "DeviceInterfaceGUIDs" - Property name
 	0x50, 0x00, 0x00, 0x00, 	// Length of property data
@@ -216,7 +216,7 @@ void USBRegisterWinusbInterface(U8 bVendorRequestIndex, const char* pcInterfaceG
 	// Copy GUID into Extended Properties feature descriptor.
 	// Trust that the caller did the right thing, but ensure double null termination if string terminates early.
 	U8* pbWriteCursor = abExtendedPropertiesFeatureDescriptor + EXTENDEDPROPERTIESFEATURE_GUIDSTRINGOFFSET;
-	const int ciMaxLength = 37;
+	const int ciMaxLength = 38;
 	
 	for(int i = 0; i < ciMaxLength; i++) {
 		if(!pcInterfaceGuid[i]) break;
