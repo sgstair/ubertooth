@@ -117,7 +117,7 @@ static const U8			abExtendedOsFeatureDescriptor[] = {
 static U8				abExtendedPropertiesFeatureDescriptor[] = {
 	0x92, 0x00, 0x00, 0x00, 	// Length (136 bytes)
 	0x00, 0x01, 				// Version 1.0
-	0x05, 0x03, 				// Extended property descriptor index
+	0x05, 0x00, 				// Extended property descriptor index
 	0x01, 0x00, 				// Number of sections
 	0x88, 0x00, 0x00, 0x00, 	// Length of property #0
 	0x07, 0x00, 0x00, 0x00, 	// Data type 7 (REG_MULTI_SZ)
